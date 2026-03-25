@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -15,7 +16,10 @@ import (
 	"github.com/agynio/reminders/internal/store"
 )
 
-const maxDelaySeconds int64 = 604800
+const (
+	maxDelaySeconds int64 = 604800
+	statusAll             = "all"
+)
 
 type Handler struct {
 	store     *store.Store
@@ -53,7 +57,7 @@ func (h *Handler) CreateReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if *req.DelaySeconds < 0 || *req.DelaySeconds > maxDelaySeconds {
-		writeError(w, http.StatusBadRequest, "delay_seconds must be between 0 and 604800")
+		writeError(w, http.StatusBadRequest, fmt.Sprintf("delay_seconds must be between 0 and %d", maxDelaySeconds))
 		return
 	}
 	note := strings.TrimSpace(req.Note)
@@ -132,16 +136,23 @@ func (h *Handler) ListReminders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	status := strings.ToLower(strings.TrimSpace(req.Status))
-	if status == "" {
-		status = string(store.ReminderStatusPending)
-	}
-	if !isValidStatus(status) {
-		writeError(w, http.StatusBadRequest, "status must be pending, completed, cancelled, or all")
+	statusFilter, err := parseStatusFilter(req.Status)
+	if err != nil {
+		writeError(
+			w,
+			http.StatusBadRequest,
+			fmt.Sprintf(
+				"status must be %s, %s, %s, or %s",
+				store.ReminderStatusPending,
+				store.ReminderStatusCompleted,
+				store.ReminderStatusCancelled,
+				statusAll,
+			),
+		)
 		return
 	}
 
-	reminders, err := h.store.ListReminders(r.Context(), threadID, status)
+	reminders, err := h.store.ListReminders(r.Context(), threadID, statusFilter)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to list reminders")
 		return
@@ -243,15 +254,6 @@ func reminderToResponse(reminder store.Reminder) reminderResponse {
 	}
 }
 
-func isValidStatus(status string) bool {
-	switch status {
-	case string(store.ReminderStatusPending), string(store.ReminderStatusCompleted), string(store.ReminderStatusCancelled), "all":
-		return true
-	default:
-		return false
-	}
-}
-
 func decodeJSON(w http.ResponseWriter, r *http.Request, dest any) bool {
 	decoder := json.NewDecoder(r.Body)
 	decoder.DisallowUnknownFields()
@@ -267,11 +269,34 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dest any) bool {
 }
 
 func writeJSON(w http.ResponseWriter, status int, payload any) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(payload)
+	if _, err := w.Write(data); err != nil {
+		log.Printf("writeJSON: write: %v", err)
+	}
 }
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, errorResponse{Error: message})
+}
+
+func parseStatusFilter(raw string) (*store.ReminderStatus, error) {
+	status := strings.ToLower(strings.TrimSpace(raw))
+	if status == "" {
+		pending := store.ReminderStatusPending
+		return &pending, nil
+	}
+	if status == statusAll {
+		return nil, nil
+	}
+	parsed, err := store.ParseReminderStatus(status)
+	if err != nil {
+		return nil, err
+	}
+	return &parsed, nil
 }

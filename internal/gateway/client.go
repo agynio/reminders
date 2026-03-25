@@ -39,6 +39,7 @@ type Client struct {
 func NewClient(zitiCtx ziti.Context, serviceName string, appIdentityID string) *Client {
 	transport := &http.Transport{
 		DialContext: func(_ context.Context, _, addr string) (net.Conn, error) {
+			// ziti.Context does not accept a context; cancellation is not propagated.
 			svc := addr
 			if host, _, err := net.SplitHostPort(addr); err == nil {
 				svc = host

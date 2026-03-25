@@ -19,12 +19,12 @@ func RequireIdentity(next http.Handler) http.Handler {
 		identityID := r.Header.Get("x-identity-id")
 		identityType := r.Header.Get("x-identity-type")
 		if identityID == "" || identityType == "" {
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			writeError(w, http.StatusUnauthorized, "missing identity")
 			return
 		}
 		parsedID, err := uuid.Parse(identityID)
 		if err != nil {
-			http.Error(w, http.StatusText(http.StatusUnauthorized), http.StatusUnauthorized)
+			writeError(w, http.StatusUnauthorized, "invalid identity")
 			return
 		}
 		identity := Identity{ID: parsedID, Type: identityType}

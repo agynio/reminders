@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -24,7 +25,11 @@ import (
 	"github.com/agynio/reminders/internal/store"
 )
 
-const shutdownTimeout = 10 * time.Second
+const (
+	shutdownTimeout = 10 * time.Second
+	retryBackoff    = 30 * time.Second
+	maxFireAttempts = 3
+)
 
 func main() {
 	if err := run(); err != nil {
@@ -66,21 +71,23 @@ func run() error {
 
 	reminderStore := store.NewStore(pool)
 	gatewayClient := gateway.NewClient(zitiCtx, cfg.GatewayServiceName, cfg.AppIdentityID)
-	scheduler := scheduler.New(func(ctx context.Context, reminderID uuid.UUID) {
-		fireReminder(ctx, reminderStore, gatewayClient, reminderID)
+	retryTracker := newRetryTracker()
+	var reminderScheduler *scheduler.Scheduler
+	reminderScheduler = scheduler.New(func(ctx context.Context, reminderID uuid.UUID) {
+		_ = fireReminder(ctx, reminderStore, gatewayClient, reminderScheduler, retryTracker, reminderID)
 	})
-	defer scheduler.Stop()
+	defer reminderScheduler.Stop()
 
 	pending, err := reminderStore.LoadPending(ctx)
 	if err != nil {
 		return fmt.Errorf("load pending reminders: %w", err)
 	}
 	for _, reminder := range pending {
-		scheduler.Schedule(reminder.ID, reminder.At)
+		reminderScheduler.Schedule(reminder.ID, reminder.At)
 	}
 	log.Printf("Loaded %d pending reminders", len(pending))
 
-	handler := api.NewHandler(reminderStore, scheduler)
+	handler := api.NewHandler(reminderStore, reminderScheduler)
 	mux := http.NewServeMux()
 	mux.Handle("/create-reminder", api.RequireIdentity(http.HandlerFunc(handler.CreateReminder)))
 	mux.Handle("/cancel-reminder", api.RequireIdentity(http.HandlerFunc(handler.CancelReminder)))
@@ -126,33 +133,111 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	if err := zitiServer.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutdown ziti server: %w", err)
+	zitiErr := zitiServer.Shutdown(shutdownCtx)
+	if zitiErr != nil {
+		zitiErr = fmt.Errorf("shutdown ziti server: %w", zitiErr)
 	}
-	if err := tcpServer.Shutdown(shutdownCtx); err != nil {
-		return fmt.Errorf("shutdown tcp server: %w", err)
+	tcpErr := tcpServer.Shutdown(shutdownCtx)
+	if tcpErr != nil {
+		tcpErr = fmt.Errorf("shutdown tcp server: %w", tcpErr)
+	}
+	shutdownErr := errors.Join(zitiErr, tcpErr)
+	if shutdownErr != nil {
+		return shutdownErr
 	}
 
 	return serveErr
 }
 
-func fireReminder(ctx context.Context, s *store.Store, client *gateway.Client, reminderID uuid.UUID) {
+func fireReminder(
+	ctx context.Context,
+	s *store.Store,
+	client *gateway.Client,
+	scheduler *scheduler.Scheduler,
+	retries *retryTracker,
+	reminderID uuid.UUID,
+) error {
+	attempt := retries.Next(reminderID)
 	reminder, err := s.GetReminder(ctx, reminderID)
 	if err != nil {
-		log.Printf("fire %s: load: %v", reminderID, err)
-		return
+		retries.Reset(reminderID)
+		log.Printf("fire reminder_id=%s thread_id=unknown attempt=%d error=%v", reminderID, attempt, err)
+		return err
 	}
+	threadID := reminder.ThreadID
 	if reminder.Status != store.ReminderStatusPending {
-		log.Printf("fire %s: status is %q, skipping", reminderID, reminder.Status)
-		return
+		retries.Reset(reminderID)
+		log.Printf(
+			"fire reminder_id=%s thread_id=%s attempt=%d status=%s action=skip",
+			reminderID,
+			threadID,
+			attempt,
+			reminder.Status,
+		)
+		return nil
 	}
-	if err := client.SendMessage(ctx, reminder.ThreadID, reminder.Note); err != nil {
-		log.Printf("fire %s: send message: %v", reminderID, err)
-		return
+	if err := client.SendMessage(ctx, threadID, reminder.Note); err != nil {
+		if attempt < maxFireAttempts {
+			scheduler.Schedule(reminderID, time.Now().Add(retryBackoff))
+			log.Printf(
+				"fire reminder_id=%s thread_id=%s attempt=%d action=reschedule delay=%s error=%v",
+				reminderID,
+				threadID,
+				attempt,
+				retryBackoff,
+				err,
+			)
+			return err
+		}
+		retries.Reset(reminderID)
+		log.Printf(
+			"fire reminder_id=%s thread_id=%s attempt=%d action=give_up error=%v",
+			reminderID,
+			threadID,
+			attempt,
+			err,
+		)
+		return err
 	}
 	if _, err := s.CompleteReminder(ctx, reminderID); err != nil {
-		log.Printf("fire %s: complete: %v", reminderID, err)
-		return
+		retries.Reset(reminderID)
+		log.Printf(
+			"fire reminder_id=%s thread_id=%s attempt=%d action=complete_failed error=%v",
+			reminderID,
+			threadID,
+			attempt,
+			err,
+		)
+		return err
 	}
-	log.Printf("fired %s for thread %s", reminderID, reminder.ThreadID)
+	retries.Reset(reminderID)
+	log.Printf(
+		"fire reminder_id=%s thread_id=%s attempt=%d action=complete",
+		reminderID,
+		threadID,
+		attempt,
+	)
+	return nil
+}
+
+type retryTracker struct {
+	mu       sync.Mutex
+	attempts map[uuid.UUID]int
+}
+
+func newRetryTracker() *retryTracker {
+	return &retryTracker{attempts: make(map[uuid.UUID]int)}
+}
+
+func (r *retryTracker) Next(id uuid.UUID) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.attempts[id]++
+	return r.attempts[id]
+}
+
+func (r *retryTracker) Reset(id uuid.UUID) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.attempts, id)
 }

@@ -199,8 +199,8 @@ func (s *Store) updateStatus(ctx context.Context, id uuid.UUID, status ReminderS
 	return reminder, nil
 }
 
-func (s *Store) ListReminders(ctx context.Context, threadID uuid.UUID, status string) ([]Reminder, error) {
-	if status == "all" {
+func (s *Store) ListReminders(ctx context.Context, threadID uuid.UUID, status *ReminderStatus) ([]Reminder, error) {
+	if status == nil {
 		rows, err := s.pool.Query(
 			ctx,
 			`SELECT id, thread_id, identity_id, note, status, at, created_at, completed_at, cancelled_at
@@ -215,11 +215,6 @@ func (s *Store) ListReminders(ctx context.Context, threadID uuid.UUID, status st
 		return scanReminders(rows)
 	}
 
-	statusValue, err := ParseReminderStatus(status)
-	if err != nil {
-		return nil, fmt.Errorf("invalid status filter: %w", err)
-	}
-
 	rows, err := s.pool.Query(
 		ctx,
 		`SELECT id, thread_id, identity_id, note, status, at, created_at, completed_at, cancelled_at
@@ -227,7 +222,7 @@ func (s *Store) ListReminders(ctx context.Context, threadID uuid.UUID, status st
          WHERE thread_id = $1 AND status = $2
          ORDER BY at ASC`,
 		threadID,
-		statusValue,
+		*status,
 	)
 	if err != nil {
 		return nil, err
