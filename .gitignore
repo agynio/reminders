@@ -1,0 +1,10 @@
+/reminders
+/dist/
+.idea/
+.vscode/
+.DS_Store
+charts/reminders/charts/
+charts/reminders/Chart.lock
+.devspace/
+.env
+.env.*
