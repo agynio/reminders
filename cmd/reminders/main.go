@@ -20,6 +20,7 @@ import (
 	"github.com/agynio/reminders/internal/api"
 	"github.com/agynio/reminders/internal/config"
 	"github.com/agynio/reminders/internal/db"
+	"github.com/agynio/reminders/internal/enrollment"
 	"github.com/agynio/reminders/internal/gateway"
 	"github.com/agynio/reminders/internal/scheduler"
 	"github.com/agynio/reminders/internal/store"
@@ -60,6 +61,14 @@ func run() error {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
 
+	enrolled, err := enrollment.Enroll(ctx, cfg.GatewayURL, cfg.ServiceToken)
+	if err != nil {
+		return fmt.Errorf("enroll app: %w", err)
+	}
+	if err := os.WriteFile(cfg.ZitiIdentityFile, enrolled.IdentityJSON, 0600); err != nil {
+		return fmt.Errorf("write ziti identity: %w", err)
+	}
+
 	zitiCfg, err := ziti.NewConfigFromFile(cfg.ZitiIdentityFile)
 	if err != nil {
 		return fmt.Errorf("load ziti identity: %w", err)
@@ -70,7 +79,7 @@ func run() error {
 	}
 
 	reminderStore := store.NewStore(pool)
-	gatewayClient := gateway.NewClient(zitiCtx, cfg.GatewayServiceName, cfg.AppIdentityID)
+	gatewayClient := gateway.NewClient(zitiCtx, cfg.GatewayServiceName, enrolled.IdentityID)
 	retryTracker := newRetryTracker()
 	var reminderScheduler *scheduler.Scheduler
 	reminderScheduler = scheduler.New(func(ctx context.Context, reminderID uuid.UUID) {

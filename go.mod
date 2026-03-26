@@ -3,9 +3,11 @@ module github.com/agynio/reminders
 go 1.25.0
 
 require (
+	connectrpc.com/connect v1.19.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.8.0
 	github.com/openziti/sdk-golang v1.5.4
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
@@ -94,6 +96,5 @@ require (
 	golang.org/x/sys v0.42.0 // indirect
 	golang.org/x/term v0.41.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
 	nhooyr.io/websocket v1.8.17 // indirect
 )

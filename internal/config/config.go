@@ -8,7 +8,8 @@ import (
 type Config struct {
 	DatabaseURL        string
 	ZitiIdentityFile   string
-	AppIdentityID      string
+	ServiceToken       string
+	GatewayURL         string
 	HTTPAddress        string
 	ZitiServiceName    string
 	GatewayServiceName string
@@ -24,9 +25,13 @@ func FromEnv() (Config, error) {
 	if cfg.ZitiIdentityFile == "" {
 		return Config{}, fmt.Errorf("ZITI_IDENTITY_FILE must be set")
 	}
-	cfg.AppIdentityID = os.Getenv("APP_IDENTITY_ID")
-	if cfg.AppIdentityID == "" {
-		return Config{}, fmt.Errorf("APP_IDENTITY_ID must be set")
+	cfg.ServiceToken = os.Getenv("SERVICE_TOKEN")
+	if cfg.ServiceToken == "" {
+		return Config{}, fmt.Errorf("SERVICE_TOKEN must be set")
+	}
+	cfg.GatewayURL = os.Getenv("GATEWAY_URL")
+	if cfg.GatewayURL == "" {
+		return Config{}, fmt.Errorf("GATEWAY_URL must be set")
 	}
 	cfg.HTTPAddress = os.Getenv("HTTP_ADDRESS")
 	if cfg.HTTPAddress == "" {
