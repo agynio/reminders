@@ -89,6 +89,10 @@ deployments:
             env:
               - name: REMINDERS_ADDRESS
                 value: "reminders:8080"
+              - name: THREADS_ADDRESS
+                value: "threads:50051"
+              - name: APPS_ADDRESS
+                value: "apps:50051"
         labels:
           app.kubernetes.io/name: reminders-e2e
 
@@ -134,7 +138,7 @@ pipelines:
       exec_container \
         --label-selector "app.kubernetes.io/name=reminders-e2e" \
         -n ${REMINDERS_NAMESPACE} \
-        -- bash -c 'cd /opt/app/data && go test -v -count=1 ./...'
+        -- bash -c 'cd /opt/app/data && buf generate --template buf.gen.e2e.yaml buf.build/agynio/api --path agynio/api/threads/v1/threads.proto --path agynio/api/apps/v1/apps.proto && go test -v -count=1 -tags e2e ./test/e2e/'
       EXIT_CODE=$?
       stop_dev e2e-runner
       purge_deployments e2e-runner
