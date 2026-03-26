@@ -76,7 +76,9 @@ env:
     value: ""
   - name: ZITI_IDENTITY_FILE
     value: "/ziti/identity.json"
-  - name: APP_IDENTITY_ID
+  - name: SERVICE_TOKEN
+    value: ""
+  - name: GATEWAY_URL
     value: ""
   - name: ZITI_SERVICE_NAME
     value: "app-reminders"
@@ -91,11 +93,10 @@ configMounts: []
 extraVolumeMounts:
   - name: ziti-identity
     mountPath: /ziti
-    readOnly: true
+    readOnly: false
 extraVolumes:
   - name: ziti-identity
-    secret:
-      secretName: reminders-ziti-identity
+    emptyDir: {}
 
 initContainers: []
 extraContainers: []
