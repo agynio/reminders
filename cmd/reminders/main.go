@@ -99,9 +99,13 @@ func run() error {
 	handler := api.NewHandler(reminderStore, reminderScheduler)
 	mux := http.NewServeMux()
 	mux.Handle("/create-reminder", api.RequireIdentity(http.HandlerFunc(handler.CreateReminder)))
+	mux.Handle("/CreateReminder", api.RequireIdentity(http.HandlerFunc(handler.CreateReminder)))
 	mux.Handle("/cancel-reminder", api.RequireIdentity(http.HandlerFunc(handler.CancelReminder)))
+	mux.Handle("/CancelReminder", api.RequireIdentity(http.HandlerFunc(handler.CancelReminder)))
 	mux.Handle("/list-reminders", api.RequireIdentity(http.HandlerFunc(handler.ListReminders)))
+	mux.Handle("/ListReminders", api.RequireIdentity(http.HandlerFunc(handler.ListReminders)))
 	mux.Handle("/get-reminder", api.RequireIdentity(http.HandlerFunc(handler.GetReminder)))
+	mux.Handle("/GetReminder", api.RequireIdentity(http.HandlerFunc(handler.GetReminder)))
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
