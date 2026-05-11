@@ -13,6 +13,18 @@ import (
 )
 
 func TestCreateReminder(t *testing.T) {
+	t.Run("pascal case proxy path", func(t *testing.T) {
+		threadID := randomThreadID()
+		resp := postJSON(t, "/CreateReminder", map[string]any{
+			"thread_id":     threadID,
+			"delay_seconds": int64(3600),
+			"note":          "pascal case " + uuid.NewString(),
+		})
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		body := decodeResponse[singleReminderResponse](t, resp)
+		require.Equal(t, threadID, body.Reminder.ThreadID)
+	})
+
 	threadID := randomThreadID()
 	note := "  reminder " + uuid.NewString() + "  "
 
