@@ -25,6 +25,18 @@ func TestCancelReminder(t *testing.T) {
 	require.Nil(t, reminder.CompletedAt)
 }
 
+func TestCancelReminder_CLIFieldAlias(t *testing.T) {
+	threadID := randomThreadID()
+	created := createTestReminder(t, threadID, 3600, "cancel cli alias "+uuid.NewString())
+
+	resp := postJSON(t, "/CancelReminder", map[string]string{"id": created.ID})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body := decodeResponse[singleReminderResponse](t, resp)
+
+	require.Equal(t, created.ID, body.Reminder.ID)
+	require.Equal(t, "cancelled", body.Reminder.Status)
+}
+
 func TestCancelReminder_AlreadyCancelled(t *testing.T) {
 	threadID := randomThreadID()
 	created := createTestReminder(t, threadID, 3600, "already cancelled "+uuid.NewString())

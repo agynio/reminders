@@ -20,6 +20,18 @@ func TestListReminders_DefaultPending(t *testing.T) {
 	require.ElementsMatch(t, []string{first.ID, second.ID}, reminderIDs(resp.Reminders))
 }
 
+func TestListReminders_CLIFieldAlias(t *testing.T) {
+	threadID := randomThreadID()
+	created := createTestReminder(t, threadID, 3600, "list cli alias "+uuid.NewString())
+
+	resp := postJSON(t, "/ListReminders", map[string]any{"thread": threadID})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body := decodeResponse[listRemindersResponse](t, resp)
+
+	require.Len(t, body.Reminders, 1)
+	require.Equal(t, []string{created.ID}, reminderIDs(body.Reminders))
+}
+
 func TestListReminders_FilterPending(t *testing.T) {
 	threadID := randomThreadID()
 	pending := createTestReminder(t, threadID, 3600, "pending "+uuid.NewString())
