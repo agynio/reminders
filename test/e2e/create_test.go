@@ -50,6 +50,24 @@ func TestCreateReminder(t *testing.T) {
 	_ = parseTimestamp(t, reminder.CreatedAt)
 }
 
+func TestCreateReminder_CLIFieldAliases(t *testing.T) {
+	threadID := randomThreadID()
+	note := "cli aliases " + uuid.NewString()
+
+	resp := postJSON(t, "/CreateReminder", map[string]any{
+		"thread": threadID,
+		"delay":  int64(300),
+		"note":   note,
+	})
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	body := decodeResponse[singleReminderResponse](t, resp)
+	reminder := body.Reminder
+
+	require.Equal(t, threadID, reminder.ThreadID)
+	require.Equal(t, note, reminder.Note)
+	require.Equal(t, "pending", reminder.Status)
+}
+
 func TestCreateReminder_ZeroDelay(t *testing.T) {
 	threadID := randomThreadID()
 	start := time.Now().UTC()

@@ -21,6 +21,17 @@ func TestGetReminder(t *testing.T) {
 	require.Equal(t, created, body.Reminder)
 }
 
+func TestGetReminder_CLIFieldAlias(t *testing.T) {
+	threadID := randomThreadID()
+	created := createTestReminder(t, threadID, 3600, "get cli alias "+uuid.NewString())
+
+	resp := postJSON(t, "/GetReminder", map[string]string{"id": created.ID})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	body := decodeResponse[singleReminderResponse](t, resp)
+
+	require.Equal(t, created, body.Reminder)
+}
+
 func TestGetReminder_NotFound(t *testing.T) {
 	resp := postJSON(t, "/get-reminder", map[string]string{"reminder_id": uuid.NewString()})
 	require.Equal(t, http.StatusNotFound, resp.StatusCode)

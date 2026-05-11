@@ -47,16 +47,18 @@ func (h *Handler) CreateReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	threadID, err := uuid.Parse(req.ThreadID)
+	threadIDValue := firstNonEmpty(req.ThreadID, req.Thread)
+	threadID, err := uuid.Parse(threadIDValue)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "thread_id must be a valid uuid")
 		return
 	}
-	if req.DelaySeconds == nil {
+	delaySeconds := firstInt64(req.DelaySeconds, req.Delay)
+	if delaySeconds == nil {
 		writeError(w, http.StatusBadRequest, "delay_seconds must be provided")
 		return
 	}
-	if *req.DelaySeconds < 0 || *req.DelaySeconds > maxDelaySeconds {
+	if *delaySeconds < 0 || *delaySeconds > maxDelaySeconds {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("delay_seconds must be between 0 and %d", maxDelaySeconds))
 		return
 	}
@@ -70,7 +72,7 @@ func (h *Handler) CreateReminder(w http.ResponseWriter, r *http.Request) {
 		ThreadID:     threadID,
 		IdentityID:   identity.ID,
 		Note:         note,
-		DelaySeconds: *req.DelaySeconds,
+		DelaySeconds: *delaySeconds,
 	})
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create reminder")
@@ -92,7 +94,7 @@ func (h *Handler) CancelReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reminderID, err := uuid.Parse(req.ReminderID)
+	reminderID, err := uuid.Parse(firstNonEmpty(req.ReminderID, req.ID))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "reminder_id must be a valid uuid")
 		return
@@ -130,7 +132,7 @@ func (h *Handler) ListReminders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	threadID, err := uuid.Parse(req.ThreadID)
+	threadID, err := uuid.Parse(firstNonEmpty(req.ThreadID, req.Thread))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "thread_id must be a valid uuid")
 		return
@@ -177,7 +179,7 @@ func (h *Handler) GetReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reminderID, err := uuid.Parse(req.ReminderID)
+	reminderID, err := uuid.Parse(firstNonEmpty(req.ReminderID, req.ID))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "reminder_id must be a valid uuid")
 		return
@@ -199,21 +201,26 @@ func (h *Handler) GetReminder(w http.ResponseWriter, r *http.Request) {
 
 type createReminderRequest struct {
 	ThreadID     string `json:"thread_id"`
+	Thread       string `json:"thread"`
 	DelaySeconds *int64 `json:"delay_seconds"`
+	Delay        *int64 `json:"delay"`
 	Note         string `json:"note"`
 }
 
 type cancelReminderRequest struct {
 	ReminderID string `json:"reminder_id"`
+	ID         string `json:"id"`
 }
 
 type listRemindersRequest struct {
 	ThreadID string `json:"thread_id"`
+	Thread   string `json:"thread"`
 	Status   string `json:"status"`
 }
 
 type getReminderRequest struct {
 	ReminderID string `json:"reminder_id"`
+	ID         string `json:"id"`
 }
 
 type reminderResponse struct {
@@ -252,6 +259,24 @@ func reminderToResponse(reminder store.Reminder) reminderResponse {
 		CompletedAt: reminder.CompletedAt,
 		CancelledAt: reminder.CancelledAt,
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+func firstInt64(values ...*int64) *int64 {
+	for _, value := range values {
+		if value != nil {
+			return value
+		}
+	}
+	return nil
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dest any) bool {
