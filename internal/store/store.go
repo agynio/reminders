@@ -164,10 +164,10 @@ func (s *Store) updateStatus(ctx context.Context, id uuid.UUID, status ReminderS
 		row := tx.QueryRow(
 			ctx,
 			`UPDATE reminders
-             SET status = $1,
-                 completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END,
-                 cancelled_at = CASE WHEN $1 = 'cancelled' THEN NOW() ELSE cancelled_at END
-             WHERE id = $2 AND status = 'pending'
+             SET status = $1::reminder_status,
+                 completed_at = CASE WHEN $1::reminder_status = 'completed'::reminder_status THEN NOW() ELSE completed_at END,
+                 cancelled_at = CASE WHEN $1::reminder_status = 'cancelled'::reminder_status THEN NOW() ELSE cancelled_at END
+             WHERE id = $2 AND status = 'pending'::reminder_status
              RETURNING id, thread_id, identity_id, note, status, at, created_at, completed_at, cancelled_at`,
 			status,
 			id,
@@ -219,7 +219,7 @@ func (s *Store) ListReminders(ctx context.Context, threadID uuid.UUID, status *R
 		ctx,
 		`SELECT id, thread_id, identity_id, note, status, at, created_at, completed_at, cancelled_at
          FROM reminders
-         WHERE thread_id = $1 AND status = $2
+         WHERE thread_id = $1 AND status = $2::reminder_status
          ORDER BY at ASC`,
 		threadID,
 		*status,
