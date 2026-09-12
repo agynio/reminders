@@ -78,6 +78,8 @@ env:
     value: "/ziti/identity.json"
   - name: SERVICE_TOKEN
     value: ""
+  - name: APP_ID
+    value: ""
   - name: GATEWAY_URL
     value: ""
   - name: ZITI_SERVICE_NAME
