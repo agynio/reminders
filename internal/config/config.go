@@ -9,6 +9,7 @@ type Config struct {
 	DatabaseURL        string
 	ZitiIdentityFile   string
 	ServiceToken       string
+	AppID              string
 	GatewayURL         string
 	HTTPAddress        string
 	ZitiServiceName    string
@@ -28,6 +29,10 @@ func FromEnv() (Config, error) {
 	cfg.ServiceToken = os.Getenv("SERVICE_TOKEN")
 	if cfg.ServiceToken == "" {
 		return Config{}, fmt.Errorf("SERVICE_TOKEN must be set")
+	}
+	cfg.AppID = os.Getenv("APP_ID")
+	if cfg.AppID == "" {
+		return Config{}, fmt.Errorf("APP_ID is required")
 	}
 	cfg.GatewayURL = os.Getenv("GATEWAY_URL")
 	if cfg.GatewayURL == "" {

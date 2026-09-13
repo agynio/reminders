@@ -28,8 +28,10 @@ import (
 
 const (
 	shutdownTimeout = 10 * time.Second
-	retryBackoff    = 30 * time.Second
-	maxFireAttempts = 3
+	// The overlay needs a moment after enrollment before the Gateway answers.
+	reportSchemaTimeout = 2 * time.Minute
+	retryBackoff        = 30 * time.Second
+	maxFireAttempts     = 3
 )
 
 func main() {
@@ -80,6 +82,15 @@ func run() error {
 
 	reminderStore := store.NewStore(pool)
 	gatewayClient := gateway.NewClient(zitiCtx, cfg.GatewayServiceName, enrolled.IdentityID)
+
+	// Reminders reads no installation configuration, and reporting an empty
+	// schema is how it says so — the Console then states that none is needed
+	// instead of offering a JSON editor for keys that do not exist.
+	schemaCtx, cancelSchema := context.WithTimeout(ctx, reportSchemaTimeout)
+	defer cancelSchema()
+	if err := gatewayClient.ReportConfigurationSchema(schemaCtx, cfg.AppID, gateway.ConfigurationSchema()); err != nil {
+		return fmt.Errorf("report configuration schema: %w", err)
+	}
 	retryTracker := newRetryTracker()
 	var reminderScheduler *scheduler.Scheduler
 	reminderScheduler = scheduler.New(func(ctx context.Context, reminderID uuid.UUID) {

@@ -13,12 +13,20 @@ import (
 	"github.com/openziti/sdk-golang/ziti"
 )
 
-const sendMessagePath = "/agynio.api.gateway.v1.ThreadsGateway/SendMessage"
+const (
+	sendMessagePath               = "/agynio.api.gateway.v1.ThreadsGateway/SendMessage"
+	reportConfigurationSchemaPath = "/agynio.api.gateway.v1.AppsGateway/ReportConfigurationSchema"
+)
 
 type SendMessageRequest struct {
 	ThreadID string `json:"threadId"`
 	SenderID string `json:"senderId"`
 	Body     string `json:"body"`
+}
+
+type reportConfigurationSchemaRequest struct {
+	AppID               string         `json:"appId"`
+	ConfigurationSchema map[string]any `json:"configurationSchema"`
 }
 
 type ConnectError struct {
@@ -87,4 +95,52 @@ func (c *Client) SendMessage(ctx context.Context, threadID uuid.UUID, note strin
 		return &connectErr
 	}
 	return fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(respBody))
+}
+
+// ReportConfigurationSchema tells the platform what configuration this app
+// reads from each installation. Reminders reads none, and reporting an empty
+// schema is how it says so: the Console then states that no configuration is
+// needed, where an app that reported nothing at all would get a JSON editor
+// for keys that do not exist.
+func (c *Client) ReportConfigurationSchema(ctx context.Context, appID string, schema map[string]any) error {
+	payload, err := json.Marshal(reportConfigurationSchemaRequest{AppID: appID, ConfigurationSchema: schema})
+	if err != nil {
+		return fmt.Errorf("marshal request: %w", err)
+	}
+	url := fmt.Sprintf("http://%s%s", c.serviceName, reportConfigurationSchemaPath)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(payload))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		return nil
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read error response: %w", err)
+	}
+	var connectErr ConnectError
+	if json.Unmarshal(respBody, &connectErr) == nil && connectErr.Code != "" {
+		return &connectErr
+	}
+	return fmt.Errorf("gateway returned status %d: %s", resp.StatusCode, string(respBody))
+}
+
+// ConfigurationSchema is what Reminders reads from an installation: nothing.
+//
+// An empty properties map is deliberately not the same as reporting no schema.
+// It says the app has described itself and has no keys, so the Console shows a
+// sentence instead of a JSON editor, and an installation carrying stray keys is
+// rejected rather than stored.
+func ConfigurationSchema() map[string]any {
+	return map[string]any{
+		"type":       "object",
+		"properties": map[string]any{},
+	}
 }
